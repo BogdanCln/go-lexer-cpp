@@ -8,7 +8,7 @@
 
 ## Progress:
 
-- [ ] Comments
+- [x] Comments
 - [ ] Tokens
 - [ ] Semicolons
 - [ ] Identifiers
@@ -56,12 +56,12 @@
     ```
     EBNF float_lit         = decimal_float_lit | hex_float_lit .
     EBNF decimal_float_lit = decimal_digits "." [ decimal_digits ] [decimal_exponent ] | 
-    							literals"." decimal_digits [ decimal_exponent ] .
+    						literals"." decimal_digits [ decimal_exponent ] .
     EBNF decimal_exponent  = ( "e" | "E" ) [ "+" | "-" ] decimal_digits .
     EBNF hex_float_lit     = "0" ( "x" | "X" ) hex_mantissa hex_exponent .
     EBNF hex_mantissa      = [ "_" ] hex_digits "." [ hex_digits ] |
-						[ "_" ] hex_digits | 
-						"." hex_digits .
+						    [ "_" ] hex_digits | 
+						    "." hex_digits .
     EBNF hex_exponent      = ( "p" | "P" ) [ "+" | "-" ] decimal_digits .
     ```
     - Imaginary literals

@@ -24,7 +24,7 @@
 
 ### EBNF = Extended Backus–Naur form
 
-
+- single line comments and multi line comments (skip)
 - keywords
     constant strings (eg: "if")
 - identifiers       

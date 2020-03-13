@@ -1,5 +1,6 @@
 #include <iostream>
 #include <fstream>
+#include <regex>
 
 using namespace std;
 
@@ -46,6 +47,33 @@ struct token_stats
         errm = err;
     }
 };
+
+vector<regex> keywords = {
+    regex("break"),
+    regex("case"),
+    regex("chan"),
+    regex("const"),
+    regex("continue"),
+    regex("default"),
+    regex("defer"),
+    regex("else"),
+    regex("fallthrough"),
+    regex("for"),
+    regex("func"),
+    regex("go"),
+    regex("goto"),
+    regex("if"),
+    regex("import"),
+    regex("interface"),
+    regex("map"),
+    regex("package"),
+    regex("range"),
+    regex("return"),
+    regex("select"),
+    regex("struct"),
+    regex("switch"),
+    regex("type"),
+    regex("var")};
 
 string read_mlc(ifstream &code, string selection, unsigned long &rows_consumed, unsigned long &next_col)
 {
@@ -126,7 +154,29 @@ token_stats lex(ifstream &code, unsigned int &row, unsigned int &column)
     }
 
     // Step 5
+    // Keywords
+    for (auto it = keywords.begin(); it != keywords.end(); it++)
+    {
+        smatch match;
+        if (regex_search(selection, match, *it, regex_constants::match_continuous))
+        {
+            int back_diff = selection.length() - match.str().length();
+            if (back_diff > 0)
+            {
+                rows_consumed--;
+                next_col = match.str().length();
+                code.seekg(-1 * back_diff, code.cur);
+                selection = match.str();
+            }
 
+            token_stats new_token("keyword", cursor, selection, row, column);
+
+            row += rows_consumed;
+            column = next_col;
+
+            return new_token;
+        }
+    }
 
     // Step 6
     int exl = selection.length();
@@ -136,10 +186,9 @@ token_stats lex(ifstream &code, unsigned int &row, unsigned int &column)
         selection = selection.substr(0, wspos);
         next_col = wspos;
         rows_consumed--;
-        // cout << exl - selection.length();
         code.seekg(selection.length() - exl, code.cur);
     }
-    token_stats new_token(cursor, selection, row, column, "Lexical error");
+    token_stats new_token(cursor, selection, row, column, "lex-error");
 
     row += rows_consumed;
     column = next_col;
@@ -171,15 +220,15 @@ int main(int argc, char **argv)
                 if (latest_token.errm == "")
                 {
                     cout << latest_token.pointer
-                         << " - " << latest_token.token
-                         << " = '" << latest_token.selection << "'"
+                         << "\t" << latest_token.token
+                         << "\t'" << latest_token.selection << "'"
                          << endl;
                 }
                 else
                 {
                     cout << latest_token.pointer
-                         << " - " << latest_token.errm
-                         << " = '" << latest_token.selection << "'"
+                         << "\t" << latest_token.errm
+                         << "\t'" << latest_token.selection << "'"
                          << endl;
                 }
             }

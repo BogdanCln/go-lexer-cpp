@@ -1,4 +1,5 @@
 package main
+fpackage main
 import "fmt"
 
 // single line comment 1

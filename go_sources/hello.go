@@ -1,4 +1,6 @@
-package main
+package	main
+
+
 fpackage main
 import "fmt"
 
@@ -12,6 +14,15 @@ line
 func main() {
 
         //literals:
+        42
+42
+42
+42
+42
+42
+42
+42
+42
 a := 42
 b := 4_2
 c := 0600

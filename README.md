@@ -6,14 +6,13 @@
 - After the official golang specification: https://golang.org/ref/spec
 - CPP using only STL and with all the code in one file
 
-## Progress:
+## Tokens progress:
 
-- [x] Comments
-- [ ] Tokens
-- [ ] Semicolons
-- [ ] Identifiers
-- [ ] Keywords
-- [ ] Operators and punctuation
+- [x] Single line comment
+- [x] Multi line comments
+- [x] Identifiers
+- [x] Keywords
+- [x] Operators and punctuation
 - [ ] Integer literals
 - [ ] Floating-point literals
 - [ ] Imaginary literals

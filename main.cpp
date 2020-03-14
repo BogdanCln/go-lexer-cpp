@@ -48,40 +48,43 @@ struct token_stats
     }
 };
 
-vector<regex> keywords = {
-    regex("break"),
-    regex("case"),
-    regex("chan"),
-    regex("const"),
-    regex("continue"),
-    regex("default"),
-    regex("defer"),
-    regex("else"),
-    regex("fallthrough"),
-    regex("for"),
-    regex("func"),
-    regex("go"),
-    regex("goto"),
-    regex("if"),
-    regex("import"),
-    regex("interface"),
-    regex("map"),
-    regex("package"),
-    regex("range"),
-    regex("return"),
-    regex("select"),
-    regex("struct"),
-    regex("switch"),
-    regex("type"),
-    regex("var")};
+regex keyword_exp("(break)|(case)|(chan)|(const)|(continue)|(default)|(defer)|(else)|(fallthrough)|(for)|(func)|(go)|(goto)|(if)|(import)|(interface)|(map)|(package)|(range)|(return)|(select)|(struct)|(switch)|(type)|(var)");
+regex operator_exp("(<<=)|(>>=)|(\\.\\.\\.)|(&\\^=)|(\\+=)|(&=)|(&&)|(==)|(!=)|(-=)|(\\|=)|(\\|\\|)|(<=)|(\\*=)|(\\^=)|(<-)|(>=)|(<<)|(\\/=)|(\\+\\+)|(:=)|(>>)|(%=)|(--)|(&\\^)|(\\+)|(\\&)|(\\()|(\\))|(-)|(\\|)|(<)|(\\[)|(\\])|(\\*)|(\\^)|(>)|(\\{)|(\\})|(\\/)|(=)|(,)|(;)|(%)|(!)|(\\.)|(:)");
+regex identifier_exp("([a-zA-Z_])(([a-zA-Z_])|\\d)*");
+
+vector<regex> dgt = {
+    //dec
+    regex("\\d(_?\\d)*"),
+    //bin
+    regex("[01](_?[01])*"),
+    //oct
+    regex("[0-7](_?[0-7])*"),
+    //hex
+    regex("[\\d(A-F)(a-f)](_?[\\d(A-F)(a-f)])*")};
+
+vector<regex> literal_exp = {
+    dgt[0],
+    dgt[1],
+    dgt[2],
+    dgt[3]};
 
 string read_mlc(ifstream &code, string selection, unsigned long &rows_consumed, unsigned long &next_col)
 {
     size_t mlc_end = selection.find("*/");
     if (mlc_end != string::npos)
     {
-        selection = selection.substr(0, mlc_end + 2);
-        next_col = mlc_end + 2;
+        if (selection.length() - 2 > mlc_end)
+        {
+            // MLC does not end with a newline
+            // so we have to move the cursor
+            int back_diff = selection.length() - 2 - mlc_end;
+            code.seekg(-1 * back_diff, code.cur);
+
+            rows_consumed--;
+            next_col = mlc_end + 2;
+            selection = selection.substr(0, mlc_end + 2);
+        }
+
         return selection;
     }
     else
@@ -97,6 +100,22 @@ string read_mlc(ifstream &code, string selection, unsigned long &rows_consumed, 
     }
 }
 
+token_stats generate_match_token(string s, streampos c, smatch match, unsigned long &rc, unsigned long &nc, unsigned int &row, unsigned int &col, ifstream &code)
+{
+    int back_diff = s.length() - match.str().length();
+    if (back_diff > 0)
+    {
+        rc--;
+        nc = match.str().length();
+        code.seekg(-1 * back_diff, code.cur);
+        s = match.str();
+    }
+
+    token_stats new_token("", c, s, row, col);
+
+    return new_token;
+}
+
 token_stats lex(ifstream &code, unsigned int &row, unsigned int &column)
 {
     /**
@@ -106,15 +125,19 @@ token_stats lex(ifstream &code, unsigned int &row, unsigned int &column)
      *    True  => update row, column; return token_stats with current selection
      *    False => GO TO 3
      * 4. Check if we have a multi line comment = line starts with /*
-     *    True  => update selection to include all thext until end of multi line comment
+     *    True  => update selection to include all input until end of multi line comment
      *             (can be a trim of current line or multiple lines)
      *             update row, column; return token_stats with current selection
      *    False => GO TO 4
-     * 5. Run the regular expressions up until one gets a match that starts from the first character
-     *    Found     => update row, column; return token_stats with current selection
-     *    Not found => GO TO 6
-     * 6. Trim selection from first character to the first whitespace, tab or new line
-     *    update row, column; return token_stats with current selection and an error message
+     * 5. Trim selection to include only the first word (0 to first whitespace)
+     * 6. Run all the regular expressions with the following rules:
+     *    6.1. Take in consideration only matches that start from the first character
+     *    6.2. Keep in memory the longest match so far
+     *    6.3. If there is a match for the whole selection stop and GO TO 8
+     * 7. If no regular expression matched 
+     *     then GO TO 8
+     *     else selection = match; update cursor, row, column; return token_stats with the match
+     * 8. update row, column; return token_stats with current selection and an error message
      */
 
     // Step 1
@@ -154,31 +177,118 @@ token_stats lex(ifstream &code, unsigned int &row, unsigned int &column)
     }
 
     // Step 5
-    // Keywords
-    for (auto it = keywords.begin(); it != keywords.end(); it++)
+
+    // Search for a whitespace on the row
+    size_t word_end = selection.find(" ");
+    if (word_end != string::npos)
     {
-        smatch match;
-        if (regex_search(selection, match, *it, regex_constants::match_continuous))
+        // move the cursor backwards
+        int back_diff = selection.length() - word_end;
+        code.seekg(-1 * back_diff, code.cur);
+
+        selection = selection.substr(0, word_end);
+        rows_consumed--;
+        next_col = word_end;
+    }
+    else
+    {
+        // No whitespace found, search for a tab
+        size_t word_end = selection.find("\t");
+        if (word_end != string::npos)
         {
-            int back_diff = selection.length() - match.str().length();
-            if (back_diff > 0)
-            {
-                rows_consumed--;
-                next_col = match.str().length();
-                code.seekg(-1 * back_diff, code.cur);
-                selection = match.str();
-            }
+            // move the cursor backwards
+            // "\t" is actually one ASCII character
+            int back_diff = selection.length() - word_end;
+            code.seekg(-1 * back_diff, code.cur);
 
-            token_stats new_token("keyword", cursor, selection, row, column);
-
-            row += rows_consumed;
-            column = next_col;
-
-            return new_token;
+            selection = selection.substr(0, word_end);
+            rows_consumed--;
+            next_col = word_end;
         }
     }
 
     // Step 6
+    smatch match;
+    string match_max = "";
+    string token_max = "";
+
+    // Keyword tokens
+    if (regex_search(selection, match, keyword_exp, regex_constants::match_continuous))
+    {
+        string matchstr = match.str();
+        if (matchstr.length() == selection.length())
+        {
+            token_stats new_token("keyword", cursor, selection, row, column);
+
+            row += rows_consumed;
+            column = next_col;
+            return new_token;
+        }
+        else if (matchstr.length() > match_max.length())
+        {
+            match_max = matchstr;
+            token_max = "keyword";
+        }
+    }
+
+    // Identifier tokens
+    if (regex_search(selection, match, identifier_exp, regex_constants::match_continuous))
+    {
+        string matchstr = match.str();
+        if (matchstr.length() == selection.length())
+        {
+            token_stats new_token("identifier", cursor, selection, row, column);
+
+            row += rows_consumed;
+            column = next_col;
+            return new_token;
+        }
+        else if (matchstr.length() > match_max.length())
+        {
+            match_max = matchstr;
+            token_max = "identifier";
+        }
+    }
+
+    // Operator/punctuation tokens
+    if (regex_search(selection, match, operator_exp, regex_constants::match_continuous))
+    {
+        string matchstr = match.str();
+        if (matchstr.length() == selection.length())
+        {
+            token_stats new_token("operator", cursor, selection, row, column);
+
+            row += rows_consumed;
+            column = next_col;
+            return new_token;
+        }
+        else if (matchstr.length() > match_max.length())
+        {
+            match_max = matchstr;
+            token_max = "operator";
+        }
+    }
+
+    // Step 7
+    if (match_max != "")
+    {
+        int back_diff = selection.length() - match_max.length();
+        if (back_diff > 0)
+        {
+            rows_consumed--;
+            next_col = match_max.length();
+            code.seekg(-1 * back_diff, code.cur);
+            selection = match.str();
+        }
+
+        token_stats new_token(token_max, cursor, selection, row, column);
+
+        row += rows_consumed;
+        column = next_col;
+        return new_token;
+    }
+
+    // Step 8
     int exl = selection.length();
     size_t wspos = selection.find(" ");
     if (wspos != string::npos)

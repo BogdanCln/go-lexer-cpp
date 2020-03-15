@@ -49,26 +49,45 @@ struct token_stats
 };
 
 regex keyword_exp("(break)|(case)|(chan)|(const)|(continue)|(default)|(defer)|(else)|(fallthrough)|(for)|(func)|(go)|(goto)|(if)|(import)|(interface)|(map)|(package)|(range)|(return)|(select)|(struct)|(switch)|(type)|(var)");
-regex operator_exp("(<<=)|(>>=)|(\\.\\.\\.)|(&\\^=)|(\\+=)|(&=)|(&&)|(==)|(!=)|(-=)|(\\|=)|(\\|\\|)|(<=)|(\\*=)|(\\^=)|(<-)|(>=)|(<<)|(\\/=)|(\\+\\+)|(:=)|(>>)|(%=)|(--)|(&\\^)|(\\+)|(\\&)|(\\()|(\\))|(-)|(\\|)|(<)|(\\[)|(\\])|(\\*)|(\\^)|(>)|(\\{)|(\\})|(\\/)|(=)|(,)|(;)|(%)|(!)|(\\.)|(:)");
 regex identifier_exp("([a-zA-Z_])(([a-zA-Z_])|\\d)*");
+regex operator_exp("(<<=)|(>>=)|(\\.\\.\\.)|(&\\^=)|(\\+=)|(&=)|(&&)|(==)|(!=)|(-=)|(\\|=)|(\\|\\|)|(<=)|(\\*=)|(\\^=)|(<-)|(>=)|(<<)|(\\/=)|(\\+\\+)|(:=)|(>>)|(%=)|(--)|(&\\^)|(\\+)|(\\&)|(\\()|(\\))|(-)|(\\|)|(<)|(\\[)|(\\])|(\\*)|(\\^)|(>)|(\\{)|(\\})|(\\/)|(=)|(,)|(;)|(%)|(!)|(\\.)|(:)");
 
-vector<regex> dgt = {
-    //dec
-    regex("\\d(_?\\d)*"),
-    //bin
-    regex("[01](_?[01])*"),
-    //oct
-    regex("[0-7](_?[0-7])*"),
-    //hex
-    regex("[\\d(A-F)(a-f)](_?[\\d(A-F)(a-f)])*")};
+vector<string> dgt = {
+    // EBNF decimal_digits = decimal_digit { [ "_" ] decimal_digit } .
+    "\\d(_?\\d)*",
 
-vector<regex> literal_exp = {
-    dgt[0],
-    dgt[1],
-    dgt[2],
-    dgt[3]};
+    // EBNF binary_digits  = binary_digit { [ "_" ] binary_digit } .
+    "[01](_?[01])*",
 
-string read_mlc(ifstream &code, string selection, unsigned long &rows_consumed, unsigned long &next_col)
+    // EBNF octal_digits   = octal_digit { [ "_" ] octal_digit } .
+    "[0-7](_?[0-7])*",
+
+    // EBNF hex_digits     = hex_digit { [ "_" ] hex_digit } .
+    "[\\d(A-F)(a-f)](_?[\\d(A-F)(a-f)])*"};
+
+vector<regex> literal_integer_exp = {
+    regex(dgt[0]),
+    regex(dgt[1]),
+    regex(dgt[2]),
+    regex(dgt[3]),
+
+    // EBNF decimal_lit    = "0" | ( "1" … "9" ) [ [ "_" ] decimal_digits ] .
+    regex("0|\\d(_?" + dgt[0] + ")?"),
+
+    // EBNF binary_lit     = "0" ( "b" | "B" ) [ "_" ] binary_digits .
+    regex("0[bB]_?" + dgt[1]),
+
+    // EBNF octal_lit      = "0" [ "o" | "O" ] [ "_" ] octal_digits .
+    regex("0[oO]?_?" + dgt[2]),
+
+    // EBNF hex_lit        = "0" ( "x" | "X" ) [ "_" ] hex_digits .
+    regex("0[xX]_?" + dgt[3]),
+
+    //  EBNF int_lit       = decimal_lit | binary_lit | octal_lit | hex_lit .
+    //  will already match one of them, no need to run another regex
+};
+
+string read_mlc(ifstream &code, string selection, unsigned long &rows_consumed, unsigned long &next_col, unsigned long s_next_col)
 {
     size_t mlc_end = selection.find("*/");
     if (mlc_end != string::npos)
@@ -81,7 +100,9 @@ string read_mlc(ifstream &code, string selection, unsigned long &rows_consumed, 
             code.seekg(-1 * back_diff, code.cur);
 
             rows_consumed--;
-            next_col = mlc_end + 2;
+            // next_col = mlc_end + 2;
+            next_col = s_next_col + mlc_end + 2;
+            
             selection = selection.substr(0, mlc_end + 2);
         }
 
@@ -96,7 +117,7 @@ string read_mlc(ifstream &code, string selection, unsigned long &rows_consumed, 
         rows_consumed++;
         next_col = 0;
 
-        return read_mlc(code, selection, rows_consumed, next_col);
+        return read_mlc(code, selection, rows_consumed, next_col, s_next_col);
     }
 }
 
@@ -141,11 +162,21 @@ token_stats lex(ifstream &code, unsigned int &row, unsigned int &column)
      */
 
     // Step 1
+    // s_next_col is needed for accurate next_col calculation
+    unsigned long s_next_col = column;
+
+    streampos s_cursor = code.tellg();
+    cout << "start cursor: " << s_cursor << endl;
+
     code >> ws;
 
-    // Step 2
     streampos cursor = code.tellg();
+    cout << "no ws cursor: " << cursor << endl;
 
+    // count whitespaces in the column counter
+    s_next_col += (cursor - s_cursor);
+
+    // Step 2
     string selection;
     getline(code, selection);
 
@@ -166,7 +197,7 @@ token_stats lex(ifstream &code, unsigned int &row, unsigned int &column)
     // Step 4
     if (selection[0] == '/' && selection[1] == '*')
     {
-        selection = read_mlc(code, selection, rows_consumed, next_col);
+        selection = read_mlc(code, selection, rows_consumed, next_col, s_next_col);
 
         token_stats new_token("MLC", cursor, selection, row, column);
 
@@ -188,7 +219,8 @@ token_stats lex(ifstream &code, unsigned int &row, unsigned int &column)
 
         selection = selection.substr(0, word_end);
         rows_consumed--;
-        next_col = word_end;
+        // next_col = word_end;
+        next_col = s_next_col + selection.length();
     }
     else
     {
@@ -203,7 +235,8 @@ token_stats lex(ifstream &code, unsigned int &row, unsigned int &column)
 
             selection = selection.substr(0, word_end);
             rows_consumed--;
-            next_col = word_end;
+            // next_col = word_end;
+            next_col = s_next_col + selection.length();
         }
     }
 
@@ -269,22 +302,53 @@ token_stats lex(ifstream &code, unsigned int &row, unsigned int &column)
         }
     }
 
+    // Literals
+    // Integer literals
+    for (auto it = literal_integer_exp.begin(); it != literal_integer_exp.end(); it++)
+    {
+        if (regex_search(selection, match, *it, regex_constants::match_continuous))
+        {
+            string matchstr = match.str();
+            if (matchstr.length() == selection.length())
+            {
+                token_stats new_token("integer_lit", cursor, selection, row, column);
+
+                row += rows_consumed;
+                column = next_col;
+                return new_token;
+            }
+            else if (matchstr.length() > match_max.length())
+            {
+                match_max = matchstr;
+                token_max = "integer_lit";
+            }
+        }
+    }
+
     // Step 7
+    cout << "selection before trim '" << selection << "'" << endl;
+    cout << "match_max '" << match_max << "'" << endl;
+    cout << "token_max '" << token_max << "'" << endl;
     if (match_max != "")
     {
         int back_diff = selection.length() - match_max.length();
         if (back_diff > 0)
         {
             rows_consumed--;
-            next_col = match_max.length();
+
+            // next_col = match_max.length();
+            next_col = s_next_col + match_max.length();
+
             code.seekg(-1 * back_diff, code.cur);
-            selection = match.str();
+            selection = match_max;
         }
 
         token_stats new_token(token_max, cursor, selection, row, column);
 
         row += rows_consumed;
         column = next_col;
+
+        cout << "selection after trim '" << selection << "'" << endl;
         return new_token;
     }
 
@@ -294,8 +358,11 @@ token_stats lex(ifstream &code, unsigned int &row, unsigned int &column)
     if (wspos != string::npos)
     {
         selection = selection.substr(0, wspos);
-        next_col = wspos;
         rows_consumed--;
+
+        // next_col = wspos;
+        next_col = s_next_col + wspos;
+
         code.seekg(selection.length() - exl, code.cur);
     }
     token_stats new_token(cursor, selection, row, column, "lex-error");

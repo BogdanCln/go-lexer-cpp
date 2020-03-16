@@ -12,6 +12,14 @@ using namespace std;
  * un mesaj de eroare atunci cand este intalnita o eroare lexicala.
 */
 
+struct EndException : public exception
+{
+    const char *what() const throw()
+    {
+        return "Reached the end of the file";
+    }
+};
+
 struct token_stats
 {
     string token;
@@ -48,6 +56,7 @@ struct token_stats
     }
 };
 
+// regex comment_exp("(\\/\\/).*");
 regex keyword_exp("(break)|(case)|(chan)|(const)|(continue)|(default)|(defer)|(else)|(fallthrough)|(for)|(func)|(go)|(goto)|(if)|(import)|(interface)|(map)|(package)|(range)|(return)|(select)|(struct)|(switch)|(type)|(var)");
 regex identifier_exp("([a-zA-Z_])(([a-zA-Z_])|\\d)*");
 regex operator_exp("(<<=)|(>>=)|(\\.\\.\\.)|(&\\^=)|(\\+=)|(&=)|(&&)|(==)|(!=)|(-=)|(\\|=)|(\\|\\|)|(<=)|(\\*=)|(\\^=)|(<-)|(>=)|(<<)|(\\/=)|(\\+\\+)|(:=)|(>>)|(%=)|(--)|(&\\^)|(\\+)|(\\&)|(\\()|(\\))|(-)|(\\|)|(<)|(\\[)|(\\])|(\\*)|(\\^)|(>)|(\\{)|(\\})|(\\/)|(=)|(,)|(;)|(%)|(!)|(\\.)|(:)");
@@ -63,7 +72,7 @@ vector<string> dgt = {
     "[0-7](_?[0-7])*",
 
     // EBNF hex_digits     = hex_digit { [ "_" ] hex_digit } .
-    "[\\d(A-F)(a-f)](_?[\\d(A-F)(a-f)])*"};
+    "(\\d|(A-F)|(a-f))(_?[\\d(A-F)(a-f)])*"};
 
 vector<regex> literal_integer_exp = {
     regex(dgt[0]),
@@ -96,13 +105,13 @@ string read_mlc(ifstream &code, string selection, unsigned long &rows_consumed, 
         {
             // MLC does not end with a newline
             // so we have to move the cursor
-            int back_diff = selection.length() - 2 - mlc_end;
-            code.seekg(-1 * back_diff, code.cur);
+            // int back_diff = selection.length() - 2 - mlc_end;
+            // code.seekg(-1 * back_diff, code.cur);
 
             rows_consumed--;
             // next_col = mlc_end + 2;
             next_col = s_next_col + mlc_end + 2;
-            
+
             selection = selection.substr(0, mlc_end + 2);
         }
 
@@ -117,27 +126,11 @@ string read_mlc(ifstream &code, string selection, unsigned long &rows_consumed, 
         rows_consumed++;
         next_col = 0;
 
-        return read_mlc(code, selection, rows_consumed, next_col, s_next_col);
+        return read_mlc(code, selection, rows_consumed, next_col, 0);
     }
 }
 
-token_stats generate_match_token(string s, streampos c, smatch match, unsigned long &rc, unsigned long &nc, unsigned int &row, unsigned int &col, ifstream &code)
-{
-    int back_diff = s.length() - match.str().length();
-    if (back_diff > 0)
-    {
-        rc--;
-        nc = match.str().length();
-        code.seekg(-1 * back_diff, code.cur);
-        s = match.str();
-    }
-
-    token_stats new_token("", c, s, row, col);
-
-    return new_token;
-}
-
-token_stats lex(ifstream &code, unsigned int &row, unsigned int &column)
+token_stats lex(ifstream &code, unsigned int &row, unsigned int &column, int skip_count)
 {
     /**
      * 1. skip whitespaces, tabs and newlines
@@ -162,16 +155,17 @@ token_stats lex(ifstream &code, unsigned int &row, unsigned int &column)
      */
 
     // Step 1
-    // s_next_col is needed for accurate next_col calculation
-    unsigned long s_next_col = column;
-
     streampos s_cursor = code.tellg();
-    cout << "start cursor: " << s_cursor << endl;
 
+    // - sare peste spatii, tab-uri, linii noi, pana intalneste primul caracter diferit de acestea;
     code >> ws;
+    if (code.peek() == EOF)
+        throw EndException();
 
     streampos cursor = code.tellg();
-    cout << "no ws cursor: " << cursor << endl;
+
+    // s_next_col is needed for accurate next_col calculation
+    unsigned long s_next_col = column;
 
     // count whitespaces in the column counter
     s_next_col += (cursor - s_cursor);
@@ -179,6 +173,10 @@ token_stats lex(ifstream &code, unsigned int &row, unsigned int &column)
     // Step 2
     string selection;
     getline(code, selection);
+
+    // set the cursor back the the beggining of the selection
+    // - seteaza pointerul curent astfel ca sa indice catre acest caracter;
+    code.seekg(cursor);
 
     unsigned long rows_consumed = 1;
     unsigned long next_col = 0;
@@ -198,6 +196,7 @@ token_stats lex(ifstream &code, unsigned int &row, unsigned int &column)
     if (selection[0] == '/' && selection[1] == '*')
     {
         selection = read_mlc(code, selection, rows_consumed, next_col, s_next_col);
+        code.seekg(cursor);
 
         token_stats new_token("MLC", cursor, selection, row, column);
 
@@ -214,8 +213,8 @@ token_stats lex(ifstream &code, unsigned int &row, unsigned int &column)
     if (word_end != string::npos)
     {
         // move the cursor backwards
-        int back_diff = selection.length() - word_end;
-        code.seekg(-1 * back_diff, code.cur);
+        // int back_diff = selection.length() - word_end + 1;
+        // code.seekg(-1 * back_diff, code.cur);
 
         selection = selection.substr(0, word_end);
         rows_consumed--;
@@ -230,8 +229,8 @@ token_stats lex(ifstream &code, unsigned int &row, unsigned int &column)
         {
             // move the cursor backwards
             // "\t" is actually one ASCII character
-            int back_diff = selection.length() - word_end;
-            code.seekg(-1 * back_diff, code.cur);
+            // int back_diff = selection.length() - word_end + 1;
+            // code.seekg(-1 * back_diff, code.cur);
 
             selection = selection.substr(0, word_end);
             rows_consumed--;
@@ -326,11 +325,9 @@ token_stats lex(ifstream &code, unsigned int &row, unsigned int &column)
     }
 
     // Step 7
-    cout << "selection before trim '" << selection << "'" << endl;
-    cout << "match_max '" << match_max << "'" << endl;
-    cout << "token_max '" << token_max << "'" << endl;
     if (match_max != "")
     {
+
         int back_diff = selection.length() - match_max.length();
         if (back_diff > 0)
         {
@@ -339,7 +336,7 @@ token_stats lex(ifstream &code, unsigned int &row, unsigned int &column)
             // next_col = match_max.length();
             next_col = s_next_col + match_max.length();
 
-            code.seekg(-1 * back_diff, code.cur);
+            // code.seekg(-1 * back_diff, code.cur);
             selection = match_max;
         }
 
@@ -348,7 +345,6 @@ token_stats lex(ifstream &code, unsigned int &row, unsigned int &column)
         row += rows_consumed;
         column = next_col;
 
-        cout << "selection after trim '" << selection << "'" << endl;
         return new_token;
     }
 
@@ -363,7 +359,7 @@ token_stats lex(ifstream &code, unsigned int &row, unsigned int &column)
         // next_col = wspos;
         next_col = s_next_col + wspos;
 
-        code.seekg(selection.length() - exl, code.cur);
+        // code.seekg(selection.length() - exl, code.cur);
     }
     token_stats new_token(cursor, selection, row, column, "lex-error");
 
@@ -389,10 +385,26 @@ int main(int argc, char **argv)
         if (code.is_open())
         {
             cout << "Succesfully opened " << argv[1] << endl;
+            token_stats latest_token;
 
-            while (code.peek() != EOF)
+            while (true)
             {
-                token_stats latest_token = lex(code, row, column);
+                if (latest_token.length > 0)
+                {
+                    // - incepand de la pointerul curent (care initial indica catre primul caracter al fisierului de intrare) sare peste un nr de caractere egal cu lungimea token-ului anterior (initial aceasta lungime este 0);
+                    code.seekg(latest_token.length, code.cur);
+                }
+
+                try
+                {
+                    latest_token = lex(code, row, column, latest_token.length);
+                    /* code */
+                }
+                catch (const exception &e)
+                {
+                    cerr << e.what() << endl;
+                    break;
+                }
 
                 if (latest_token.errm == "")
                 {

@@ -1,4 +1,5 @@
-package	main
+package	main package	anothermain
+a=1
 
 
 fpackage main
@@ -15,22 +16,22 @@ func main() {
 
         //literals:
         42
-42
-42
-42
-42
-42
-42
-42
-42
-a := 42
-b := 4_2
-c := 0600
-d := 0_600
-e := 0o600
-f := 0O600      
-g := 0xBadFace
-h := 0xBad_Face
+        4_2
+        0600
+        0_600
+        0o600
+        0O600       // second character is capital letter 'O'
+        0xBadFace
+        0xBad_Face
+        0x_67_7a_2f_cc_40_c6
+        170141183460469231731687303715884105727
+        170_141183_460469_231731_687303_715884_105727
+        
+        _42         // an identifier, not an integer literal
+        42_         // invalid: _ must separate successive digits
+        4__2        // invalid: only one _ at a time
+        0_xBadFace  // invalid: _ must separate successive digits
+
     fmt.Println("hello world", a, b, c, d, e, f, g, h)
 }
 

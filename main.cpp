@@ -96,7 +96,7 @@ vector<regex> literal_integer_exp = {
     //  will already match one of them, no need to run another regex
 };
 
-string read_mlc(ifstream &code, string selection, unsigned long &rows_consumed, unsigned long &next_col, unsigned long s_next_col)
+string read_mlc(ifstream &code, string selection, unsigned long &rows_consumed, unsigned long &next_col, unsigned long start_col)
 {
     size_t mlc_end = selection.find("*/");
     if (mlc_end != string::npos)
@@ -108,9 +108,10 @@ string read_mlc(ifstream &code, string selection, unsigned long &rows_consumed, 
             // int back_diff = selection.length() - 2 - mlc_end;
             // code.seekg(-1 * back_diff, code.cur);
 
-            rows_consumed--;
+            if (rows_consumed >= 1)
+                rows_consumed--;
             // next_col = mlc_end + 2;
-            next_col = s_next_col + mlc_end + 2;
+            next_col = start_col + mlc_end + 2;
 
             selection = selection.substr(0, mlc_end + 2);
         }
@@ -155,31 +156,53 @@ token_stats lex(ifstream &code, unsigned int &row, unsigned int &column, int ski
      */
 
     // Step 1
-    streampos s_cursor = code.tellg();
+    unsigned long ws_count = 0;
 
-    // - sare peste spatii, tab-uri, linii noi, pana intalneste primul caracter diferit de acestea;
-    code >> ws;
+    // start_col is needed for accurate next_col calculation
+    unsigned long start_col = column;
+
+    // skip shitespaces, tabs and newlines
+    // code >> ws;
+
+    const string skip = " \t\n";
+    while (true)
+    {
+        int next_c = code.peek();
+        if (string::npos != skip.find(next_c))
+        {
+            if ((char)next_c == '\n')
+            {
+                start_col = 0;
+                row++;
+            }
+            else
+            {
+                ws_count++;
+                start_col++;
+            }
+
+            code.ignore();
+        }
+        else
+        {
+            break;
+        }
+    }
+
     if (code.peek() == EOF)
         throw EndException();
 
     streampos cursor = code.tellg();
 
-    // s_next_col is needed for accurate next_col calculation
-    unsigned long s_next_col = column;
-
-    // count whitespaces in the column counter
-    s_next_col += (cursor - s_cursor);
-
     // Step 2
     string selection;
     getline(code, selection);
 
-    // set the cursor back the the beggining of the selection
-    // - seteaza pointerul curent astfel ca sa indice catre acest caracter;
-    code.seekg(cursor);
-
     unsigned long rows_consumed = 1;
     unsigned long next_col = 0;
+
+    // set the cursor back the the beggining of the selection
+    code.seekg(cursor);
 
     // Step 3
     if (selection[0] == '/' && selection[1] == '/')
@@ -195,7 +218,7 @@ token_stats lex(ifstream &code, unsigned int &row, unsigned int &column, int ski
     // Step 4
     if (selection[0] == '/' && selection[1] == '*')
     {
-        selection = read_mlc(code, selection, rows_consumed, next_col, s_next_col);
+        selection = read_mlc(code, selection, rows_consumed, next_col, start_col);
         code.seekg(cursor);
 
         token_stats new_token("MLC", cursor, selection, row, column);
@@ -209,34 +232,17 @@ token_stats lex(ifstream &code, unsigned int &row, unsigned int &column, int ski
     // Step 5
 
     // Search for a whitespace on the row
-    size_t word_end = selection.find(" ");
-    if (word_end != string::npos)
+    size_t first_ws = selection.find(" ");
+    size_t first_tab = selection.find("\t");
+    size_t word_end = (first_ws < first_tab) ? first_ws : first_tab;
+    if (word_end != string::npos && word_end != selection.length() - 1)
     {
-        // move the cursor backwards
-        // int back_diff = selection.length() - word_end + 1;
-        // code.seekg(-1 * back_diff, code.cur);
-
         selection = selection.substr(0, word_end);
-        rows_consumed--;
-        // next_col = word_end;
-        next_col = s_next_col + selection.length();
-    }
-    else
-    {
-        // No whitespace found, search for a tab
-        size_t word_end = selection.find("\t");
-        if (word_end != string::npos)
-        {
-            // move the cursor backwards
-            // "\t" is actually one ASCII character
-            // int back_diff = selection.length() - word_end + 1;
-            // code.seekg(-1 * back_diff, code.cur);
 
-            selection = selection.substr(0, word_end);
+        if (rows_consumed >= 1)
             rows_consumed--;
-            // next_col = word_end;
-            next_col = s_next_col + selection.length();
-        }
+
+        next_col = start_col + selection.length();
     }
 
     // Step 6
@@ -327,16 +333,13 @@ token_stats lex(ifstream &code, unsigned int &row, unsigned int &column, int ski
     // Step 7
     if (match_max != "")
     {
-
         int back_diff = selection.length() - match_max.length();
         if (back_diff > 0)
         {
-            rows_consumed--;
+            if (rows_consumed >= 1)
+                rows_consumed--;
 
-            // next_col = match_max.length();
-            next_col = s_next_col + match_max.length();
-
-            // code.seekg(-1 * back_diff, code.cur);
+            next_col = start_col + match_max.length();
             selection = match_max;
         }
 
@@ -354,12 +357,11 @@ token_stats lex(ifstream &code, unsigned int &row, unsigned int &column, int ski
     if (wspos != string::npos)
     {
         selection = selection.substr(0, wspos);
-        rows_consumed--;
 
-        // next_col = wspos;
-        next_col = s_next_col + wspos;
+        if (rows_consumed >= 1)
+            rows_consumed--;
 
-        // code.seekg(selection.length() - exl, code.cur);
+        next_col = start_col + wspos;
     }
     token_stats new_token(cursor, selection, row, column, "lex-error");
 
@@ -372,7 +374,7 @@ token_stats lex(ifstream &code, unsigned int &row, unsigned int &column, int ski
 int main(int argc, char **argv)
 {
     ifstream code;
-    unsigned int row, column;
+    unsigned int row = 1, column = 1;
 
     if (argc < 2)
     {
@@ -391,8 +393,12 @@ int main(int argc, char **argv)
             {
                 if (latest_token.length > 0)
                 {
-                    // - incepand de la pointerul curent (care initial indica catre primul caracter al fisierului de intrare) sare peste un nr de caractere egal cu lungimea token-ului anterior (initial aceasta lungime este 0);
                     code.seekg(latest_token.length, code.cur);
+                    if (code.peek() == '\n')
+                    {
+                        code.ignore();
+                        column = 0;
+                    }
                 }
 
                 try
@@ -408,14 +414,14 @@ int main(int argc, char **argv)
 
                 if (latest_token.errm == "")
                 {
-                    cout << latest_token.pointer
+                    cout << latest_token.row << " | " << latest_token.column
                          << "\t" << latest_token.token
                          << "\t'" << latest_token.selection << "'"
                          << endl;
                 }
                 else
                 {
-                    cout << latest_token.pointer
+                    cout << latest_token.row << " | " << latest_token.column
                          << "\t" << latest_token.errm
                          << "\t'" << latest_token.selection << "'"
                          << endl;

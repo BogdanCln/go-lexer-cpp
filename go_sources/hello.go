@@ -1,6 +1,7 @@
 package	main package	anothermain
 a=1
 
+
 fpackage main
 import "fmt"
 

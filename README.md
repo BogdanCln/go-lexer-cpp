@@ -13,7 +13,7 @@
 - [x] Identifiers
 - [x] Keywords
 - [x] Operators and punctuation
-- [ ] Integer literals
+- [x] Integer literals
 - [ ] Floating-point literals
 - [ ] Imaginary literals
 - [ ] Rune literals

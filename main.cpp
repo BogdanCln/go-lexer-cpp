@@ -4,22 +4,6 @@
 
 using namespace std;
 
-/** Scrieti analizorul sub forma unei functii care returneaza:
- * tipul token-ului curent
- * lungimea sirului corespunzator din fisierul de intrare
- * linia din fisierul de intrare pe care se afla token-ul curent
- * pointer catre primul caracter al token-ulului curent
- * un mesaj de eroare atunci cand este intalnita o eroare lexicala.
-*/
-
-struct EndException : public exception
-{
-    const char *what() const throw()
-    {
-        return "Reached the end of the file";
-    }
-};
-
 struct token_stats
 {
     string token;
@@ -56,45 +40,113 @@ struct token_stats
     }
 };
 
-// regex comment_exp("(\\/\\/).*");
+struct EndException : public exception
+{
+    const char *what() const throw()
+    {
+        return "Reached the end of the file";
+    }
+};
+
 regex keyword_exp("(break)|(case)|(chan)|(const)|(continue)|(default)|(defer)|(else)|(fallthrough)|(for)|(func)|(go)|(goto)|(if)|(import)|(interface)|(map)|(package)|(range)|(return)|(select)|(struct)|(switch)|(type)|(var)");
 regex identifier_exp("([a-zA-Z_])(([a-zA-Z_])|\\d)*");
 regex operator_exp("(<<=)|(>>=)|(\\.\\.\\.)|(&\\^=)|(\\+=)|(&=)|(&&)|(==)|(!=)|(-=)|(\\|=)|(\\|\\|)|(<=)|(\\*=)|(\\^=)|(<-)|(>=)|(<<)|(\\/=)|(\\+\\+)|(:=)|(>>)|(%=)|(--)|(&\\^)|(\\+)|(\\&)|(\\()|(\\))|(-)|(\\|)|(<)|(\\[)|(\\])|(\\*)|(\\^)|(>)|(\\{)|(\\})|(\\/)|(=)|(,)|(;)|(%)|(!)|(\\.)|(:)");
 
-vector<string> dgt = {
+string dgt[4] = {
     // EBNF decimal_digits = decimal_digit { [ "_" ] decimal_digit } .
-    "\\d(_?\\d)*",
+    "(\\d(_?\\d)*)",
 
     // EBNF binary_digits  = binary_digit { [ "_" ] binary_digit } .
-    "[01](_?[01])*",
+    "([01](_?[01])*)",
 
     // EBNF octal_digits   = octal_digit { [ "_" ] octal_digit } .
-    "[0-7](_?[0-7])*",
+    "([0-7](_?[0-7])*)",
 
     // EBNF hex_digits     = hex_digit { [ "_" ] hex_digit } .
-    "(\\d|(A-F)|(a-f))(_?[\\d(A-F)(a-f)])*"};
+    "((\\d|[A-F]|[a-f])(_?(\\d|[A-F]|[a-f]))*)"};
 
-vector<regex> literal_integer_exp = {
+string int_lits[4] = {
+    // EBNF decimal_lit    = "0" | ( "1" … "9" ) [ [ "_" ] decimal_digits ] .
+    "(0|\\d(_?" + dgt[0] + ")?)",
+
+    // EBNF binary_lit     = "0" ( "b" | "B" ) [ "_" ] binary_digits .
+    "(0[bB]_?" + dgt[1] + ")",
+
+    // EBNF octal_lit      = "0" [ "o" | "O" ] [ "_" ] octal_digits .
+    "(0[oO]?_?" + dgt[2] + ")",
+
+    // EBNF hex_lit        = "0" ( "x" | "X" ) [ "_" ] hex_digits .
+    "(0[xX]_?" + dgt[3] + ")",
+};
+
+regex literal_integer_exp[8] = {
     regex(dgt[0]),
     regex(dgt[1]),
     regex(dgt[2]),
     regex(dgt[3]),
 
-    // EBNF decimal_lit    = "0" | ( "1" … "9" ) [ [ "_" ] decimal_digits ] .
-    regex("0|\\d(_?" + dgt[0] + ")?"),
-
-    // EBNF binary_lit     = "0" ( "b" | "B" ) [ "_" ] binary_digits .
-    regex("0[bB]_?" + dgt[1]),
-
-    // EBNF octal_lit      = "0" [ "o" | "O" ] [ "_" ] octal_digits .
-    regex("0[oO]?_?" + dgt[2]),
-
-    // EBNF hex_lit        = "0" ( "x" | "X" ) [ "_" ] hex_digits .
-    regex("0[xX]_?" + dgt[3]),
-
     //  EBNF int_lit       = decimal_lit | binary_lit | octal_lit | hex_lit .
-    //  will already match one of them, no need to run another regex
+
+    /**
+     * Wrong: regex(int_lits[0] + "|" + int_lits[1] + "|" + int_lits[2] + "|" + int_lits[3])
+     * Need to match the longer one so we need separare regexes
+    **/
+    regex(int_lits[0]),
+    regex(int_lits[1]),
+    regex(int_lits[2]),
+    regex(int_lits[3]),
 };
+
+string exp[2] = {
+    // EBNF decimal_exponent  = ( "e" | "E" ) [ "+" | "-" ] decimal_digits .
+    "([eE][+-]?" + dgt[0] + ")",
+    // EBNF hex_exponent      = ( "p" | "P" ) [ "+" | "-" ] decimal_digits .
+    "([pP][+-]?" + dgt[0] + ")",
+};
+
+// EBNF hex_mantissa = [ "_" ] hex_digits "." [ hex_digits ] |[ "_" ] hex_digits |"." hex_digits .
+string hex_man = "((_?" + dgt[3] + "\\." + dgt[3] + "?)|(_?" + dgt[3] + ")|(\\." + dgt[3] + "))";
+
+string float_lits[4] = {
+    // EBNF decimal_float_lit = decimal_digits "." [ decimal_digits ] [ decimal_exponent ] | decimal_digits decimal_exponent | "." decimal_digits [ decimal_exponent ] .
+    /**
+     * Wrong: "((" + dgt[0] + "\\.(" + dgt[0] + ")?(" + exp[0] + ")?)|(" + dgt[0] + exp[0] + ")|(\\." + dgt[0] + "(" + exp[0] + ")?))",
+     * Need to match the longer one so we need separare regexes
+    **/
+    // decimal_digits "." [ decimal_digits ] [ decimal_exponent ]
+    "(" + dgt[0] + "\\.(" + dgt[0] + ")?(" + exp[0] + ")?)",
+    // decimal_digits decimal_exponent
+    "(" + dgt[0] + exp[0] + ")",
+    // "." decimal_digits [ decimal_exponent ]
+    "(\\." + dgt[0] + "(" + exp[0] + ")?)",
+
+    // EBNF hex_float_lit     = "0" ( "x" | "X" ) hex_mantissa hex_exponent .
+    "(0[xX]" + hex_man + exp[1] + ")",
+};
+
+regex literal_float_exp[7] = {
+    // EBNF decimal_exponent
+    regex(exp[0]),
+
+    // EBNF float_lit         = decimal_float_lit | hex_float_lit .
+    /**
+     * Wrong: regex(float_lits[0] + "|" + float_lits[1]+ "|" + float_lits[2] + "|" + float_lits[3]),
+     * Need to match the longer one so we need separare regexes
+    **/
+    regex(float_lits[0]),
+    regex(float_lits[1]),
+    regex(float_lits[2]),
+    regex(float_lits[3]),
+
+    // EBNF hex_mantissa
+    regex(hex_man),
+
+    // EBNF hex_exponent
+    regex(exp[1]),
+};
+
+// EBNF imaginary_lit = (decimal_digits | int_lit | float_lit) "i" .
+regex literal_imaginary_lit("((" + dgt[0] + ")|(" + int_lits[0] + "|" + int_lits[1] + "|" + int_lits[2] + "|" + int_lits[3] + ")|(" + float_lits[0] + "|" + float_lits[1]+ "|" + float_lits[2] + "|" + float_lits[3] + "))i");
 
 string read_mlc(ifstream &code, string selection, unsigned long &rows_consumed, unsigned long &next_col, unsigned long start_col)
 {
@@ -197,7 +249,6 @@ token_stats lex(ifstream &code, unsigned int &row, unsigned int &column, int ski
     // Step 2
     string selection;
     getline(code, selection);
-
     unsigned long rows_consumed = 1;
     unsigned long next_col = 0;
 
@@ -309,9 +360,9 @@ token_stats lex(ifstream &code, unsigned int &row, unsigned int &column, int ski
 
     // Literals
     // Integer literals
-    for (auto it = literal_integer_exp.begin(); it != literal_integer_exp.end(); it++)
+    for (int i = 0; i < 8; i++)
     {
-        if (regex_search(selection, match, *it, regex_constants::match_continuous))
+        if (regex_search(selection, match, literal_integer_exp[i], regex_constants::match_continuous))
         {
             string matchstr = match.str();
             if (matchstr.length() == selection.length())
@@ -330,6 +381,46 @@ token_stats lex(ifstream &code, unsigned int &row, unsigned int &column, int ski
         }
     }
 
+    // Floating-point literals
+    for (int i = 0; i < 7; i++)
+    {
+        if (regex_search(selection, match, literal_float_exp[i], regex_constants::match_continuous))
+        {
+            string matchstr = match.str();
+            if (matchstr.length() == selection.length())
+            {
+                token_stats new_token("float_lit", cursor, selection, row, column);
+
+                row += rows_consumed;
+                column = next_col;
+                return new_token;
+            }
+            else if (matchstr.length() > match_max.length())
+            {
+                match_max = matchstr;
+                token_max = "float_lit";
+            }
+        }
+    }
+
+    // Imaginary literals
+    if (regex_search(selection, match, literal_imaginary_lit, regex_constants::match_continuous))
+    {
+        string matchstr = match.str();
+        if (matchstr.length() == selection.length())
+        {
+            token_stats new_token("imaginary_lit", cursor, selection, row, column);
+
+            row += rows_consumed;
+            column = next_col;
+            return new_token;
+        }
+        else if (matchstr.length() > match_max.length())
+        {
+            match_max = matchstr;
+            token_max = "imaginary_lit";
+        }
+    }
     // Step 7
     if (match_max != "")
     {

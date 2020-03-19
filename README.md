@@ -14,8 +14,8 @@
 - [x] Keywords
 - [x] Operators and punctuation
 - [x] Integer literals
-- [ ] Floating-point literals
-- [ ] Imaginary literals
+- [x] Floating-point literals
+- [x] Imaginary literals
 - [ ] Rune literals
 - [ ] String literals
 
@@ -64,7 +64,15 @@
     EBNF hex_exponent      = ( "p" | "P" ) [ "+" | "-" ] decimal_digits .
     ```
     - Imaginary literals
+    ```
+    EBNF imaginary_lit = (decimal_digits | int_lit | float_lit) "i" .
+    ```
     - String literals
+    ```
+    string_lit             = raw_string_lit | interpreted_string_lit .
+    raw_string_lit         = "`" { unicode_char | newline } "`" .
+    interpreted_string_lit = `"` { unicode_value | byte_value } `"` .
+    ```
     
 - semicolons (skip)
 - newline (update row and column)

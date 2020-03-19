@@ -16,9 +16,14 @@
 - [x] Integer literals
 - [x] Floating-point literals
 - [x] Imaginary literals
-- [ ] Rune literals
-- [ ] String literals
-
+- [ ] Rune literals - **stuck**:
+```
+ECMAScript, as well as all other flavors supported by the std::regex, does not support Unicode properties (Unicode category classes).
+```
+- [ ] String literals - **stuck**:
+```
+ECMAScript, as well as all other flavors supported by the std::regex, does not support Unicode properties (Unicode category classes).
+```
 ## Tokens and regex execution order:
 
 ### EBNF = Extended Backus–Naur form
@@ -66,6 +71,17 @@
     - Imaginary literals
     ```
     EBNF imaginary_lit = (decimal_digits | int_lit | float_lit) "i" .
+    ```
+    - Rune literals
+    ```
+    EBNF rune_lit         = "'" ( unicode_value | byte_value ) "'" .
+    EBNF unicode_value    = unicode_char | little_u_value | big_u_value | escaped_char .
+    EBNF byte_value       = octal_byte_value | hex_byte_value .
+    EBNF octal_byte_value = `\` octal_digit octal_digit octal_digit .
+    EBNF hex_byte_value   = `\` "x" hex_digit hex_digit .
+    EBNF little_u_value   = `\` "u" hex_digit hex_digit hex_digit hex_digit .
+    EBNF big_u_value      = `\` "U" hex_digit hex_digit hex_digit hex_digit hex_digit hex_digit hex_digit hex_digit .
+    EBNF escaped_char     = `\` ( "a" | "b" | "f" | "n" | "r" | "t" | "v" | `\` | "'" | `"` ) .
     ```
     - String literals
     ```

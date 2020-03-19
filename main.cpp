@@ -146,7 +146,7 @@ regex literal_float_exp[7] = {
 };
 
 // EBNF imaginary_lit = (decimal_digits | int_lit | float_lit) "i" .
-regex literal_imaginary_lit("((" + dgt[0] + ")|(" + int_lits[0] + "|" + int_lits[1] + "|" + int_lits[2] + "|" + int_lits[3] + ")|(" + float_lits[0] + "|" + float_lits[1]+ "|" + float_lits[2] + "|" + float_lits[3] + "))i");
+regex literal_imaginary_exp("((" + dgt[0] + ")|(" + int_lits[0] + "|" + int_lits[1] + "|" + int_lits[2] + "|" + int_lits[3] + ")|(" + float_lits[0] + "|" + float_lits[1]+ "|" + float_lits[2] + "|" + float_lits[3] + "))i");
 
 string read_mlc(ifstream &code, string selection, unsigned long &rows_consumed, unsigned long &next_col, unsigned long start_col)
 {
@@ -404,7 +404,7 @@ token_stats lex(ifstream &code, unsigned int &row, unsigned int &column, int ski
     }
 
     // Imaginary literals
-    if (regex_search(selection, match, literal_imaginary_lit, regex_constants::match_continuous))
+    if (regex_search(selection, match, literal_imaginary_exp, regex_constants::match_continuous))
     {
         string matchstr = match.str();
         if (matchstr.length() == selection.length())

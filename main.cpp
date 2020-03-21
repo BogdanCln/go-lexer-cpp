@@ -146,9 +146,11 @@ regex literal_float_exp[7] = {
 };
 
 // EBNF imaginary_lit = (decimal_digits | int_lit | float_lit) "i" .
-regex literal_imaginary_exp("((" + dgt[0] + ")|(" + int_lits[0] + "|" + int_lits[1] + "|" + int_lits[2] + "|" + int_lits[3] + ")|(" + float_lits[0] + "|" + float_lits[1]+ "|" + float_lits[2] + "|" + float_lits[3] + "))i");
+regex literal_imaginary_exp("((" + dgt[0] + ")|(" + int_lits[0] + "|" + int_lits[1] + "|" + int_lits[2] + "|" + int_lits[3] + ")|(" + float_lits[0] + "|" + float_lits[1] + "|" + float_lits[2] + "|" + float_lits[3] + "))i");
 
-string read_mlc(ifstream &code, string selection, unsigned long &rows_consumed, unsigned long &next_col, unsigned long start_col)
+regex literal_string("\".*\"");
+
+void skip_mlc(ifstream &code, string selection, unsigned long &rows_consumed, unsigned long &next_col)
 {
     size_t mlc_end = selection.find("*/");
     if (mlc_end != string::npos)
@@ -157,29 +159,27 @@ string read_mlc(ifstream &code, string selection, unsigned long &rows_consumed, 
         {
             // MLC does not end with a newline
             // so we have to move the cursor
-            // int back_diff = selection.length() - 2 - mlc_end;
-            // code.seekg(-1 * back_diff, code.cur);
+            int back_diff = selection.length() - 1 - mlc_end;
+            code.seekg(-1 * back_diff, code.cur);
 
             if (rows_consumed >= 1)
                 rows_consumed--;
-            // next_col = mlc_end + 2;
-            next_col = start_col + mlc_end + 2;
 
-            selection = selection.substr(0, mlc_end + 2);
+            next_col = mlc_end + 2;
         }
 
-        return selection;
+        return;
     }
     else
     {
         string line;
         getline(code, line);
 
-        selection = selection + "\n" + line;
+        selection = line;
         rows_consumed++;
-        next_col = 0;
+        next_col = 1;
 
-        return read_mlc(code, selection, rows_consumed, next_col, 0);
+        return skip_mlc(code, selection, rows_consumed, next_col);
     }
 }
 
@@ -212,11 +212,10 @@ token_stats lex(ifstream &code, unsigned int &row, unsigned int &column, int ski
 
     // start_col is needed for accurate next_col calculation
     unsigned long start_col = column;
+    // cout << "start_col before ws: " << start_col << endl;
 
     // skip shitespaces, tabs and newlines
-    // code >> ws;
-
-    const string skip = " \t\n";
+    const string skip = " \t\n ";
     while (true)
     {
         int next_c = code.peek();
@@ -224,8 +223,13 @@ token_stats lex(ifstream &code, unsigned int &row, unsigned int &column, int ski
         {
             if ((char)next_c == '\n')
             {
-                start_col = 0;
+                start_col = 1;
                 row++;
+            }
+            else if ((char)next_c == '\t')
+            {
+                ws_count += 4;
+                start_col += 4;
             }
             else
             {
@@ -240,6 +244,8 @@ token_stats lex(ifstream &code, unsigned int &row, unsigned int &column, int ski
             break;
         }
     }
+    // cout << "start_col after ws: " << start_col << endl;
+    column = start_col;
 
     if (code.peek() == EOF)
         throw EndException();
@@ -250,34 +256,30 @@ token_stats lex(ifstream &code, unsigned int &row, unsigned int &column, int ski
     string selection;
     getline(code, selection);
     unsigned long rows_consumed = 1;
-    unsigned long next_col = 0;
+    unsigned long next_col = 1;
 
-    // set the cursor back the the beggining of the selection
-    code.seekg(cursor);
-
-    // Step 3
     if (selection[0] == '/' && selection[1] == '/')
     {
-        token_stats new_token("SLC", cursor, selection, row, column);
-
+        // Step 3
         row += rows_consumed;
         column = next_col;
 
-        return new_token;
+        return lex(code, row, column, 0);
     }
-
-    // Step 4
-    if (selection[0] == '/' && selection[1] == '*')
+    else if (selection[0] == '/' && selection[1] == '*')
     {
-        selection = read_mlc(code, selection, rows_consumed, next_col, start_col);
-        code.seekg(cursor);
-
-        token_stats new_token("MLC", cursor, selection, row, column);
+        // Step 4
+        skip_mlc(code, selection, rows_consumed, next_col);
 
         row += rows_consumed;
         column = next_col;
 
-        return new_token;
+        return lex(code, row, column, 0);
+    }
+    else
+    {
+        // set the cursor back the the beggining of the selection
+        code.seekg(cursor);
     }
 
     // Step 5
@@ -421,6 +423,26 @@ token_stats lex(ifstream &code, unsigned int &row, unsigned int &column, int ski
             token_max = "imaginary_lit";
         }
     }
+
+    // String literals
+    if (regex_search(selection, match, literal_string, regex_constants::match_continuous))
+    {
+        string matchstr = match.str();
+        if (matchstr.length() == selection.length())
+        {
+            token_stats new_token("string_lit", cursor, selection, row, column);
+
+            row += rows_consumed;
+            column = next_col;
+            return new_token;
+        }
+        else if (matchstr.length() > match_max.length())
+        {
+            match_max = matchstr;
+            token_max = "string_lit";
+        }
+    }
+
     // Step 7
     if (match_max != "")
     {
@@ -488,7 +510,7 @@ int main(int argc, char **argv)
                     if (code.peek() == '\n')
                     {
                         code.ignore();
-                        column = 0;
+                        column = 1;
                     }
                 }
 

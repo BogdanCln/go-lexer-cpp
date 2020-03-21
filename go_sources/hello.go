@@ -3,8 +3,14 @@ package main
 import (
 	"fmt"
 )
+/* Multi
+line
+comment */
+
 
 func main() {
+    var a := 1
+
     // INTS:
 	42          //42 is integer_lit
     4_2         //4_2 is integer_lit

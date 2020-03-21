@@ -189,13 +189,13 @@ token_stats lex(ifstream &code, unsigned int &row, unsigned int &column, int ski
      * 1. skip whitespaces, tabs and newlines
      * 2. selection = content from current pointer up until the first newline
      * 3. Check if we have a single line comment = line starts with //
-     *    True  => update row, column; return token_stats with current selection
-     *    False => GO TO 3
+     *    True  => update row, column; GO TO 1
+     *    False => GO TO 4
      * 4. Check if we have a multi line comment = line starts with /*
      *    True  => update selection to include all input until end of multi line comment
      *             (can be a trim of current line or multiple lines)
-     *             update row, column; return token_stats with current selection
-     *    False => GO TO 4
+     *             update row, column; GO TO 1
+     *    False => GO TO 5
      * 5. Trim selection to include only the first word (0 to first whitespace)
      * 6. Run all the regular expressions with the following rules:
      *    6.1. Take in consideration only matches that start from the first character

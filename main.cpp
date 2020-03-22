@@ -1,46 +1,62 @@
+// gr. 342, Calina Bogdan, Tema1: I.2, lexer automat pentru golang
 #include <iostream>
 #include <fstream>
 #include <regex>
+#include <set>
 
 using namespace std;
 
 struct token_stats
 {
+    static set<string> string_set;
+
+public:
     string token;
     unsigned int length;
-    unsigned long row;
-    unsigned long column;
+    unsigned int row;
+    unsigned int column;
     streampos pointer;
-    string errm = "";
-    string selection;
+    string errm;
+    set<string>::iterator selection_ptr;
 
     token_stats()
     {
         length = 0;
+        errm = "";
     }
 
     token_stats(string t, streampos p, string sel, unsigned int r, unsigned int c)
     {
+        insert_ret = token_stats::string_set.insert(sel);
+        selection_ptr = insert_ret.first;
+
         token = t;
         pointer = p;
         length = sel.length();
-        selection = sel;
         row = r;
         column = c;
+        errm = "";
     }
 
     token_stats(streampos p, string sel, unsigned int r, unsigned int c, string err)
     {
+        insert_ret = token_stats::string_set.insert(sel);
+        selection_ptr = insert_ret.first;
+        
         pointer = p;
         length = sel.length();
-        selection = sel;
         row = r;
         column = c;
         errm = err;
     }
+
+private:
+    pair<set<string>::iterator, bool> insert_ret;
 };
 
-struct EndException : public exception
+set<string> token_stats::string_set;
+
+struct end_exc : public exception
 {
     const char *what() const throw()
     {
@@ -97,7 +113,7 @@ regex literal_integer_exp[8] = {
     regex(int_lits[3]),
 };
 
-string exp[2] = {
+string exp_part[2] = {
     // EBNF decimal_exponent  = ( "e" | "E" ) [ "+" | "-" ] decimal_digits .
     "([eE][+-]?" + dgt[0] + ")",
     // EBNF hex_exponent      = ( "p" | "P" ) [ "+" | "-" ] decimal_digits .
@@ -110,23 +126,23 @@ string hex_man = "((_?" + dgt[3] + "\\." + dgt[3] + "?)|(_?" + dgt[3] + ")|(\\."
 string float_lits[4] = {
     // EBNF decimal_float_lit = decimal_digits "." [ decimal_digits ] [ decimal_exponent ] | decimal_digits decimal_exponent | "." decimal_digits [ decimal_exponent ] .
     /**
-     * Wrong: "((" + dgt[0] + "\\.(" + dgt[0] + ")?(" + exp[0] + ")?)|(" + dgt[0] + exp[0] + ")|(\\." + dgt[0] + "(" + exp[0] + ")?))",
+     * Wrong: "((" + dgt[0] + "\\.(" + dgt[0] + ")?(" + exp_part[0] + ")?)|(" + dgt[0] + exp_part[0] + ")|(\\." + dgt[0] + "(" + exp_part[0] + ")?))",
      * Need to match the longer one so we need separare regexes
     **/
     // decimal_digits "." [ decimal_digits ] [ decimal_exponent ]
-    "(" + dgt[0] + "\\.(" + dgt[0] + ")?(" + exp[0] + ")?)",
+    "(" + dgt[0] + "\\.(" + dgt[0] + ")?(" + exp_part[0] + ")?)",
     // decimal_digits decimal_exponent
-    "(" + dgt[0] + exp[0] + ")",
+    "(" + dgt[0] + exp_part[0] + ")",
     // "." decimal_digits [ decimal_exponent ]
-    "(\\." + dgt[0] + "(" + exp[0] + ")?)",
+    "(\\." + dgt[0] + "(" + exp_part[0] + ")?)",
 
     // EBNF hex_float_lit     = "0" ( "x" | "X" ) hex_mantissa hex_exponent .
-    "(0[xX]" + hex_man + exp[1] + ")",
+    "(0[xX]" + hex_man + exp_part[1] + ")",
 };
 
 regex literal_float_exp[7] = {
     // EBNF decimal_exponent
-    regex(exp[0]),
+    regex(exp_part[0]),
 
     // EBNF float_lit         = decimal_float_lit | hex_float_lit .
     /**
@@ -142,7 +158,7 @@ regex literal_float_exp[7] = {
     regex(hex_man),
 
     // EBNF hex_exponent
-    regex(exp[1]),
+    regex(exp_part[1]),
 };
 
 // EBNF imaginary_lit = (decimal_digits | int_lit | float_lit) "i" .
@@ -150,7 +166,7 @@ regex literal_imaginary_exp("((" + dgt[0] + ")|(" + int_lits[0] + "|" + int_lits
 
 regex literal_string("\".*\"");
 
-void skip_mlc(ifstream &code, string selection, unsigned long &rows_consumed, unsigned long &next_col)
+void skip_mlc(ifstream &code, string selection, unsigned int &rows_consumed, unsigned int &next_col)
 {
     size_t mlc_end = selection.find("*/");
     if (mlc_end != string::npos)
@@ -208,10 +224,10 @@ token_stats lex(ifstream &code, unsigned int &row, unsigned int &column, int ski
      */
 
     // Step 1
-    unsigned long ws_count = 0;
+    unsigned int ws_count = 0;
 
     // start_col is needed for accurate next_col calculation
-    unsigned long start_col = column;
+    unsigned int start_col = column;
     // cout << "start_col before ws: " << start_col << endl;
 
     // skip shitespaces, tabs and newlines
@@ -248,15 +264,15 @@ token_stats lex(ifstream &code, unsigned int &row, unsigned int &column, int ski
     column = start_col;
 
     if (code.peek() == EOF)
-        throw EndException();
+        throw end_exc();
 
     streampos cursor = code.tellg();
 
     // Step 2
     string selection;
     getline(code, selection);
-    unsigned long rows_consumed = 1;
-    unsigned long next_col = 1;
+    unsigned int rows_consumed = 1;
+    unsigned int next_col = 1;
 
     if (selection[0] == '/' && selection[1] == '/')
     {
@@ -529,14 +545,14 @@ int main(int argc, char **argv)
                 {
                     cout << latest_token.row << " | " << latest_token.column
                          << "\t" << latest_token.token
-                         << "\t'" << latest_token.selection << "'"
+                         << "\t'" << *latest_token.selection_ptr << "'"
                          << endl;
                 }
                 else
                 {
                     cout << latest_token.row << " | " << latest_token.column
                          << "\t" << latest_token.errm
-                         << "\t'" << latest_token.selection << "'"
+                         << "\t'" << *latest_token.selection_ptr << "'"
                          << endl;
                 }
             }

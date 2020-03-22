@@ -5,6 +5,8 @@
         "string_view": "cpp",
         "regex": "cpp",
         "string": "cpp",
-        "ostream": "cpp"
+        "ostream": "cpp",
+        "cmath": "cpp",
+        "bitset": "cpp"
     }
 }

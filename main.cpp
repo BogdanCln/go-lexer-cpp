@@ -27,7 +27,7 @@ public:
 
     token_stats(string t, streampos p, string sel, unsigned int r, unsigned int c)
     {
-        insert_ret = token_stats::string_set.insert(sel);
+        pair<set<string>::iterator, bool> insert_ret = token_stats::string_set.insert(sel);
         selection_ptr = insert_ret.first;
 
         token = t;
@@ -40,7 +40,7 @@ public:
 
     token_stats(streampos p, string sel, unsigned int r, unsigned int c, string err)
     {
-        insert_ret = token_stats::string_set.insert(sel);
+        pair<set<string>::iterator, bool> insert_ret = token_stats::string_set.insert(sel);
         selection_ptr = insert_ret.first;
         
         pointer = p;
@@ -49,20 +49,11 @@ public:
         column = c;
         errm = err;
     }
-
-private:
-    pair<set<string>::iterator, bool> insert_ret;
 };
 
 set<string> token_stats::string_set;
 
-struct end_exc : public exception
-{
-    const char *what() const throw()
-    {
-        return "Reached the end of the file";
-    }
-};
+struct end_exc : public std::exception {};
 
 regex keyword_exp("(break)|(case)|(chan)|(const)|(continue)|(default)|(defer)|(else)|(fallthrough)|(for)|(func)|(go)|(goto)|(if)|(import)|(interface)|(map)|(package)|(range)|(return)|(select)|(struct)|(switch)|(type)|(var)");
 regex identifier_exp("([a-zA-Z_])(([a-zA-Z_])|\\d)*");
@@ -534,6 +525,11 @@ int main(int argc, char **argv)
                 {
                     latest_token = lex(code, row, column, latest_token.length);
                     /* code */
+                }
+                catch (const end_exc &e)
+                {
+                    cerr << "Reached the end of the file" << endl;
+                    break;
                 }
                 catch (const exception &e)
                 {
